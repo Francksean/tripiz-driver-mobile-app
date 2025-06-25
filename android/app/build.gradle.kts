@@ -8,11 +8,15 @@ plugins {
 android {
     namespace = "com.example.tripiz_driver_mobile_app"
     compileSdk = flutter.compileSdkVersion
-    ndkVersion = flutter.ndkVersion
+    ndkVersion = "27.0.12077973"
+
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
+        isCoreLibraryDesugaringEnabled = true // ✅ Ajoute cette ligne
+
+
     }
 
     kotlinOptions {
@@ -29,6 +33,12 @@ android {
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }
+
+    dependencies {
+        coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
+        // autres dépendances...
+    }
+
 
     buildTypes {
         release {
