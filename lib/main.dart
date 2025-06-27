@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tripiz_driver_mobile_app/QRCode/screens/qrcode_screen.dart';
 import 'package:tripiz_driver_mobile_app/common/common_scaffold.dart';
 import 'package:tripiz_driver_mobile_app/common/constants/app_colors.dart';
 import 'package:tripiz_driver_mobile_app/home/screens/home_screen.dart';
-import 'package:tripiz_driver_mobile_app/account/components/account_app_bar.dart';
 import 'package:tripiz_driver_mobile_app/account/screens/account_screen.dart';
 import 'package:tripiz_driver_mobile_app/location/ws_position_sender.dart';
 
@@ -26,7 +24,9 @@ class _MyAppState extends State<MyApp> {
   @override
   void initState() {
     super.initState();
-    _wsSender = WsPositionSender(busId: "a5db4bd4-204a-4564-8487-1fc27d0c4444"); // ← passe le bon UUID
+    _wsSender = WsPositionSender(
+      busId: "a5db4bd4-204a-4564-8487-1fc27d0c4444",
+    ); // ← passe le bon UUID
     _wsSender.init();
   }
 
@@ -44,7 +44,10 @@ class _MyAppState extends State<MyApp> {
         GoRoute(path: '/', builder: (context, state) => const HomeScreen()),
         GoRoute(path: '/', builder: (context, state) => const QrcodeScreen()),
         GoRoute(path: '/', builder: (context, state) => const AccountScreen()),
-        GoRoute(path: '/app', builder: (context, state) => const CommonScaffold()),
+        GoRoute(
+          path: '/app',
+          builder: (context, state) => const CommonScaffold(),
+        ),
       ],
     );
 

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
 
 class QrcodeAppBar extends StatelessWidget implements PreferredSizeWidget {
   const QrcodeAppBar({super.key});
@@ -8,8 +9,6 @@ class QrcodeAppBar extends StatelessWidget implements PreferredSizeWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AppBar(
-      backgroundColor: Colors.transparent,
-    );
+    return AppBar(backgroundColor: Colors.transparent);
   }
 }

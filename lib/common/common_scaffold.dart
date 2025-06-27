@@ -25,16 +25,10 @@ class _CommonScaffoldState extends State<CommonScaffold> {
     });
   }
 
-  final List<PreferredSizeWidget> appBars = [
-    HomeAppBar(),
-    QrcodeAppBar(),
-    AccountAppBar()
-  ];
+  final List<PreferredSizeWidget> appBars = [QrcodeAppBar(), AccountAppBar()];
   final List<Widget> pages = [
     // liste des widgets de page
-    HomeScreen(),
     QrcodeScreen(),
-    AccountScreen()
   ];
 
   @override
@@ -50,11 +44,6 @@ class _CommonScaffoldState extends State<CommonScaffold> {
         elevation: 2,
         onDestinationSelected: _updateSelectedIndex,
         destinations: const [
-          NavigationDestination(
-            selectedIcon: Icon(Icons.home_filled, color: AppColors.primary),
-            icon: Icon(Icons.home_outlined, color: AppColors.black),
-            label: "Home",
-          ),
           NavigationDestination(
             selectedIcon: Icon(Icons.qr_code, color: AppColors.primary),
             icon: Icon(Icons.qr_code_outlined, color: AppColors.black),
