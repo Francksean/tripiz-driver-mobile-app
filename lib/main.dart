@@ -7,13 +7,34 @@ import 'package:tripiz_driver_mobile_app/common/constants/app_colors.dart';
 import 'package:tripiz_driver_mobile_app/home/screens/home_screen.dart';
 import 'package:tripiz_driver_mobile_app/account/components/account_app_bar.dart';
 import 'package:tripiz_driver_mobile_app/account/screens/account_screen.dart';
+import 'package:tripiz_driver_mobile_app/location/ws_position_sender.dart';
 
 void main() {
   runApp(const MyApp());
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  late final WsPositionSender _wsSender;
+
+  @override
+  void initState() {
+    super.initState();
+    _wsSender = WsPositionSender(busId: "a5db4bd4-204a-4564-8487-1fc27d0c4444"); // ← passe le bon UUID
+    _wsSender.init();
+  }
+
+  @override
+  void dispose() {
+    _wsSender.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
