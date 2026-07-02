@@ -9,7 +9,7 @@ class DioClient {
   // Constructeur privé
   DioClient._internal() {
     dio = Dio(BaseOptions(
-      baseUrl: 'http://192.168.1.114:9000/api/v1',
+      baseUrl: 'https://tripiz-api-production-d0f2.up.railway.app',
       connectTimeout: const Duration(seconds: 15),
       receiveTimeout: const Duration(seconds: 15),
     ));

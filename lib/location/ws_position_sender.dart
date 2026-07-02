@@ -1,61 +1,87 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:geolocator/geolocator.dart';
 import 'package:stomp_dart_client/stomp_dart_client.dart';
 
-
 class WsPositionSender {
   final String busId;
-  late final StompClient _client;
+  StompClient? _client;
   bool _connected = false;
+  StreamSubscription<Position>? _positionSub;
 
-  WsPositionSender({required this.busId});
+  void Function(String message)? onError;
 
-  void init() async {
-    _client = StompClient(
-      config: StompConfig(
-        url: 'ws://tripiz-api-production.up.railway.app/ws',
-        onConnect: _onConnect,
-        onWebSocketError: (error) => print('WebSocket error: $error'),
-        onDisconnect: (_) => _connected = false,
-        reconnectDelay: const Duration(seconds: 5),
-      ),
-    );
-    _client.activate();
+  WsPositionSender({required this.busId, this.onError});
+
+  Future<void> init() async {
+    try {
+      _client = StompClient(
+        config: StompConfig(
+          url: 'wss://tripiz-api-production.up.railway.app/ws',
+          onConnect: _onConnect,
+          onWebSocketError: (error) {
+            _connected = false;
+            _reportError('Erreur WebSocket : $error');
+          },
+          onStompError: (frame) {
+            _reportError('Erreur STOMP : ${frame.body}');
+          },
+          onDisconnect: (_) => _connected = false,
+          reconnectDelay: const Duration(seconds: 5),
+        ),
+      );
+      _client!.activate();
+
+      // On démarre le flux GPS tout de suite, sans attendre la connexion WS.
+      // _sendPosition n'enverra rien tant que _connected == false.
+      await _startLocationStream();
+    } catch (e) {
+      _reportError('Impossible d\'initialiser le client STOMP : $e');
+    }
+  }
+
+  void _reportError(String message) {
+    print(message);
+    onError?.call(message);
   }
 
   void _onConnect(StompFrame frame) {
     _connected = true;
-    _startLocationStream();
+    // Le flux GPS tourne déjà : dès la prochaine position, elle sera envoyée.
   }
 
-  void _startLocationStream() async {
-    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-    if (!serviceEnabled) {
-      print("GPS non activé !");
-      return;
-    }
-
-    LocationPermission permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
-      permission = await Geolocator.requestPermission();
-      if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
-        print("Permission refusée");
+  Future<void> _startLocationStream() async {
+    try {
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        _reportError("GPS non activé !");
         return;
       }
-    }
 
-    Geolocator.getPositionStream(
-      locationSettings: const LocationSettings(
-        accuracy: LocationAccuracy.high,
-        distanceFilter: 10, // en mètres
-      ),
-    ).listen((Position position) {
-      _sendPosition(position);
-    });
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        _reportError("Permission de localisation non accordée");
+        return;
+      }
+
+      await _positionSub?.cancel();
+      _positionSub = Geolocator.getPositionStream(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          distanceFilter: 10,
+        ),
+      ).listen(
+        _sendPosition,
+        onError: (e) => _reportError('Erreur flux GPS : $e'),
+      );
+    } catch (e) {
+      _reportError('Erreur démarrage localisation : $e');
+    }
   }
 
   void _sendPosition(Position pos) {
-    if (!_connected) return;
+    if (!_connected || _client == null) return;
 
     final data = {
       "busId": busId,
@@ -63,16 +89,20 @@ class WsPositionSender {
       "longitude": pos.longitude,
     };
 
-    _client.send(
-      destination: '/app/bus/update',
-      body: jsonEncode(data),
-      headers: {'content-type': 'application/json'},
-    );
-
-    print("🛰 Position envoyée : $data");
+    try {
+      _client!.send(
+        destination: '/app/bus/update',
+        body: jsonEncode(data),
+        headers: {'content-type': 'application/json'},
+      );
+      print("🛰 Position envoyée : $data");
+    } catch (e) {
+      _reportError("Erreur d'envoi de position : $e");
+    }
   }
 
-  void dispose() {
-    _client.deactivate();
+  Future<void> dispose() async {
+    await _positionSub?.cancel();
+    _client?.deactivate();
   }
 }

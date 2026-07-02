@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:tripiz_driver_mobile_app/QRCode/screens/qrcode_screen.dart';
 import 'package:tripiz_driver_mobile_app/common/common_scaffold.dart';
 import 'package:tripiz_driver_mobile_app/common/constants/app_colors.dart';
-import 'package:tripiz_driver_mobile_app/home/screens/home_screen.dart';
-import 'package:tripiz_driver_mobile_app/account/screens/account_screen.dart';
+import 'package:tripiz_driver_mobile_app/location/location_permission_screen.dart';
 import 'package:tripiz_driver_mobile_app/location/ws_position_sender.dart';
 
 void main() {
@@ -20,14 +18,35 @@ class MyApp extends StatefulWidget {
 
 class _MyAppState extends State<MyApp> {
   late final WsPositionSender _wsSender;
+  late final GoRouter _router;
 
   @override
   void initState() {
     super.initState();
+
     _wsSender = WsPositionSender(
-      busId: "a5db4bd4-204a-4564-8487-1fc27d0c4444",
-    ); // ← passe le bon UUID
-    _wsSender.init();
+      busId: "a5db4bd4-204a-4564-8487-1fc27d0c4444", // ← passe le bon UUID
+      onError: (msg) => debugPrint("WsPositionSender: $msg"),
+    );
+
+    _router = GoRouter(
+      initialLocation: '/permission',
+      routes: [
+        GoRoute(
+          path: '/permission',
+          builder: (context, state) => LocationPermissionScreen(
+            onGranted: () {
+              _wsSender.init(); // démarre GPS + tentative de connexion/envoi
+              _router.go('/app');
+            },
+          ),
+        ),
+        GoRoute(
+          path: '/app',
+          builder: (context, state) => const CommonScaffold(),
+        ),
+      ],
+    );
   }
 
   @override
@@ -38,26 +57,13 @@ class _MyAppState extends State<MyApp> {
 
   @override
   Widget build(BuildContext context) {
-    final GoRouter router = GoRouter(
-      initialLocation: '/app',
-      routes: [
-        GoRoute(path: '/', builder: (context, state) => const HomeScreen()),
-        GoRoute(path: '/', builder: (context, state) => const QrcodeScreen()),
-        GoRoute(path: '/', builder: (context, state) => const AccountScreen()),
-        GoRoute(
-          path: '/app',
-          builder: (context, state) => const CommonScaffold(),
-        ),
-      ],
-    );
-
     return MaterialApp.router(
       title: 'Tripiz Driver',
       theme: ThemeData(
         useMaterial3: true,
         colorScheme: ColorScheme.fromSeed(seedColor: AppColors.primary),
       ),
-      routerConfig: router,
+      routerConfig: _router,
     );
   }
 }
