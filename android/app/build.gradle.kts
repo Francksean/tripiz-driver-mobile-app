@@ -23,7 +23,7 @@ android {
     defaultConfig {
 
         applicationId = "com.example.tripiz_driver_mobile_app"
-        minSdk = 23
+        minSdk = flutter.minSdkVersion
         //minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode

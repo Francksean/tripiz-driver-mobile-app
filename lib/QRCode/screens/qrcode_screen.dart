@@ -44,7 +44,7 @@ class _QrcodeScreenState extends State<QrcodeScreen> {
     };
 
     const String endpointUrl =
-        'https://tripiz-api-production.up.railway.app/transactions/spending';
+        'https://tripiz-api-production-d0f2.up.railway.app/transactions/spending';
 
     try {
       final response = await http.post(
