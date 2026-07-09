@@ -25,8 +25,7 @@ class _MyAppState extends State<MyApp> {
     super.initState();
 
     _wsSender = WsPositionSender(
-      busId: "a5db4bd4-204a-4564-8487-1fc27d0c4444", // ← passe le bon UUID
-      onError: (msg) => debugPrint("WsPositionSender: $msg"),
+       onError: (msg) => debugPrint("WsPositionSender: $msg"),
     );
 
     _router = GoRouter(

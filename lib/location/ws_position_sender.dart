@@ -13,6 +13,10 @@ const String _kTempPassword = 'admin123';
 const String _kLoginUrl =
     'https://tripiz-api-production-d0f2.up.railway.app/auth/login';
 
+/// Endpoint retournant les infos de l'utilisateur authentifié (dont son id).
+const String _kMeUrl =
+    'https://tripiz-api-production-d0f2.up.railway.app/auth/me';
+
 /// Appelle l'endpoint de login et retourne le token JWT (accessToken).
 Future<String> _fetchTempJwtToken() async {
   _Log.info('POST $_kLoginUrl avec username="$_kTempEmail"');
@@ -44,6 +48,33 @@ Future<String> _fetchTempJwtToken() async {
   return token;
 }
 
+/// Récupère l'id du chauffeur connecté via GET /auth/me (champ "userId").
+Future<String> _fetchDriverId(String token) async {
+  _Log.info('GET $_kMeUrl');
+
+  final response = await http.get(
+    Uri.parse(_kMeUrl),
+    headers: {
+      'Accept': 'application/json',
+      'Authorization': 'Bearer $token',
+    },
+  );
+
+  _Log.info('Réponse /auth/me : ${response.statusCode} — body="${response.body}"');
+
+  if (response.statusCode != 200) {
+    throw Exception(
+        'Échec de récupération du profil (${response.statusCode}) : ${response.body.isEmpty ? "(réponse vide)" : response.body}');
+  }
+
+  final json = jsonDecode(response.body) as Map<String, dynamic>;
+  final userId = json['userId'] as String?;
+  if (userId == null) {
+    throw Exception('userId introuvable dans la réponse de /auth/me : ${response.body}');
+  }
+  return userId;
+}
+
 /// Utilitaire de logs colorés (ANSI) pour repérer facilement
 /// les erreurs et succès au milieu de logs nombreux.
 class _Log {
@@ -60,7 +91,9 @@ class _Log {
 }
 
 class WsPositionSender {
-  final String busId;
+  // busId n'est plus imposé au constructeur : il est résolu en interne
+  // via /auth/me (champ "userId") juste après le login temporaire.
+  String? _busId;
   StompClient? _client;
   bool _connected = false;
   StreamSubscription<Position>? _positionSub;
@@ -69,7 +102,7 @@ class WsPositionSender {
 
   void Function(String message)? onError;
 
-  WsPositionSender({required this.busId, this.onError});
+  WsPositionSender({this.onError});
 
   Future<void> init() async {
     try {
@@ -78,6 +111,11 @@ class WsPositionSender {
       _Log.info('Récupération du token JWT temporaire...');
       final token = await _fetchTempJwtToken();
       _Log.success('Token JWT récupéré');
+
+      // Récupère l'id du chauffeur connecté pour l'utiliser comme busId.
+      _Log.info('Récupération de l\'id chauffeur via /auth/me...');
+      _busId = await _fetchDriverId(token);
+      _Log.success('Id chauffeur récupéré : $_busId');
 
       _client = StompClient(
         config: StompConfig(
@@ -169,10 +207,10 @@ class WsPositionSender {
   }
 
   void _sendPosition(Position pos) {
-    if (!_connected || _client == null) return;
+    if (!_connected || _client == null || _busId == null) return;
 
     final data = {
-      "busId": busId,
+      "busId": _busId,
       "latitude": pos.latitude,
       "longitude": pos.longitude,
       "type": "UPDATE",
