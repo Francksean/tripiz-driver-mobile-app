@@ -57,6 +57,7 @@ class _MyAppState extends State<MyApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp.router(
+      debugShowCheckedModeBanner: false,
       title: 'Tripiz Driver',
       theme: ThemeData(
         useMaterial3: true,

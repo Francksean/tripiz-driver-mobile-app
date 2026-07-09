@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
-import 'dart:developer';
+import '../log/log.dart'; // adapte le chemin selon l'emplacement réel de log.dart
+import 'auth_service.dart';
 
 class DioClient {
   // Instance privée de Dio
@@ -15,17 +16,36 @@ class DioClient {
     ));
 
     dio.interceptors.add(InterceptorsWrapper(
-      onRequest: (options, handler) {
-        log('Requête envoyée : ${options.uri}');
-        log('Payload envoyé : ${options.data}');
+      onRequest: (options, handler) async {
+        // Ajoute automatiquement le Bearer token à chaque requête,
+        // sauf sur l'endpoint de login lui-même.
+        if (!options.path.contains('/auth/login')) {
+          try {
+            final token = await AuthService.instance.getToken();
+            options.headers['Authorization'] = 'Bearer $token';
+          } catch (e) {
+            Log.error('Impossible de récupérer le token pour la requête : $e');
+          }
+        }
+        Log.info('Requête envoyée : ${options.uri}');
+        Log.info('Payload envoyé : ${options.data}');
         return handler.next(options);
       },
       onResponse: (response, handler) {
-        print('Réponse reçue : ${response.data}');
+        Log.success('Réponse reçue : ${response.data}');
         return handler.next(response);
       },
       onError: (DioException e, handler) {
-        print('Erreur : ${e.message}');
+        Log.error('Erreur : ${e.message}');
+        Log.error('   → URL: ${e.requestOptions.method} ${e.requestOptions.uri}');
+        Log.error('   → Réponse serveur: ${e.response?.data}');
+
+        if (e.response?.statusCode == 401) {
+          // Le token a peut-être expiré — on l'invalide pour forcer
+          // un nouveau login au prochain appel.
+          AuthService.instance.invalidate();
+        }
+
         return handler.next(e);
       },
     ));

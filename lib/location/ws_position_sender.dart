@@ -1,103 +1,25 @@
 import 'dart:async';
 import 'dart:convert';
-import 'package:geolocator/geolocator.dart';
-import 'package:http/http.dart' as http;
+import 'package:location/location.dart';
+import 'package:permission_handler/permission_handler.dart' as ph;
 import 'package:stomp_dart_client/stomp_dart_client.dart';
 
-/// ⚠️ SOLUTION TEMPORAIRE — à supprimer dès qu'un vrai écran de connexion existe.
-/// Identifiants codés en dur pour avancer sans page de login.
-const String _kTempEmail = 'mballa@tripiz.com';
-const String _kTempPassword = 'admin123';
+import '../common/dio/auth_service.dart';
+import '../common/log/log.dart';
 
-/// Adaptez cette URL à votre vrai endpoint de login Spring Security.
-const String _kLoginUrl =
-    'https://tripiz-api-production-d0f2.up.railway.app/auth/login';
-
-/// Endpoint retournant les infos de l'utilisateur authentifié (dont son id).
-const String _kMeUrl =
-    'https://tripiz-api-production-d0f2.up.railway.app/auth/me';
-
-/// Appelle l'endpoint de login et retourne le token JWT (accessToken).
-Future<String> _fetchTempJwtToken() async {
-  _Log.info('POST $_kLoginUrl avec username="$_kTempEmail"');
-
-  final response = await http.post(
-    Uri.parse(_kLoginUrl),
-    headers: {
-      'Content-Type': 'application/json',
-      'Accept': 'application/json',
-    },
-    body: jsonEncode({
-      'username': _kTempEmail,
-      'password': _kTempPassword,
-    }),
-  );
-
-  _Log.info('Réponse login : ${response.statusCode} — body="${response.body}"');
-
-  if (response.statusCode != 200) {
-    throw Exception(
-        'Échec du login temporaire (${response.statusCode}) : ${response.body.isEmpty ? "(réponse vide)" : response.body}');
-  }
-
-  final json = jsonDecode(response.body) as Map<String, dynamic>;
-  final token = json['accessToken'] as String?;
-  if (token == null) {
-    throw Exception('accessToken introuvable dans la réponse de login : ${response.body}');
-  }
-  return token;
-}
-
-/// Récupère l'id du chauffeur connecté via GET /auth/me (champ "userId").
-Future<String> _fetchDriverId(String token) async {
-  _Log.info('GET $_kMeUrl');
-
-  final response = await http.get(
-    Uri.parse(_kMeUrl),
-    headers: {
-      'Accept': 'application/json',
-      'Authorization': 'Bearer $token',
-    },
-  );
-
-  _Log.info('Réponse /auth/me : ${response.statusCode} — body="${response.body}"');
-
-  if (response.statusCode != 200) {
-    throw Exception(
-        'Échec de récupération du profil (${response.statusCode}) : ${response.body.isEmpty ? "(réponse vide)" : response.body}');
-  }
-
-  final json = jsonDecode(response.body) as Map<String, dynamic>;
-  final userId = json['userId'] as String?;
-  if (userId == null) {
-    throw Exception('userId introuvable dans la réponse de /auth/me : ${response.body}');
-  }
-  return userId;
-}
+typedef _Log = Log;
 
 /// Utilitaire de logs colorés (ANSI) pour repérer facilement
 /// les erreurs et succès au milieu de logs nombreux.
-class _Log {
-  static const _reset = '\x1B[0m';
-  static const _red = '\x1B[31m';
-  static const _green = '\x1B[32m';
-  static const _yellow = '\x1B[33m';
-  static const _cyan = '\x1B[36m';
-
-  static void error(String msg) => print('$_red🔴 ERREUR: $msg$_reset');
-  static void success(String msg) => print('$_green✅ SUCCÈS: $msg$_reset');
-  static void warning(String msg) => print('$_yellow⚠️  $msg$_reset');
-  static void info(String msg) => print('$_cyan ℹ️  $msg$_reset');
-}
 
 class WsPositionSender {
-  // busId n'est plus imposé au constructeur : il est résolu en interne
-  // via /auth/me (champ "userId") juste après le login temporaire.
-  String? _busId;
   StompClient? _client;
   bool _connected = false;
-  StreamSubscription<Position>? _positionSub;
-  Position? _lastPosition;
+  String? _busId;
+
+  final Location _location = Location();
+  StreamSubscription<LocationData>? _positionSub;
+  LocationData? _lastPosition;
   Timer? _sendTimer;
 
   void Function(String message)? onError;
@@ -106,15 +28,12 @@ class WsPositionSender {
 
   Future<void> init() async {
     try {
-      // ⚠️ TEMPORAIRE : récupère un JWT via login codé en dur, en attendant
-      // un véritable écran de connexion dans l'application.
-      _Log.info('Récupération du token JWT temporaire...');
-      final token = await _fetchTempJwtToken();
-      _Log.success('Token JWT récupéré');
+      _Log.info('Récupération du token via AuthService...');
+      final token = await AuthService.instance.getToken();
+      _Log.success('Token récupéré');
 
-      // Récupère l'id du chauffeur connecté pour l'utiliser comme busId.
-      _Log.info('Récupération de l\'id chauffeur via /auth/me...');
-      _busId = await _fetchDriverId(token);
+      _Log.info('Récupération de l\'id chauffeur via AuthService...');
+      _busId = await AuthService.instance.getDriverId();
       _Log.success('Id chauffeur récupéré : $_busId');
 
       _client = StompClient(
@@ -133,16 +52,13 @@ class WsPositionSender {
             _Log.warning('Déconnecté du serveur STOMP');
           },
           reconnectDelay: const Duration(seconds: 5),
-          // Le token est envoyé dans les headers STOMP CONNECT.
           stompConnectHeaders: {'Authorization': 'Bearer $token'},
-          // Certains backends exigent aussi le header au niveau du handshake WS.
           webSocketConnectHeaders: {'Authorization': 'Bearer $token'},
         ),
       );
       _client!.activate();
 
       // On démarre le flux GPS tout de suite, sans attendre la connexion WS.
-      // _sendPosition n'enverra rien tant que _connected == false.
       await _startLocationStream();
     } catch (e) {
       _reportError('Impossible d\'initialiser le client STOMP : $e');
@@ -160,9 +76,6 @@ class WsPositionSender {
     _startPeriodicSend();
   }
 
-  /// Envoie la dernière position connue toutes les 5 secondes,
-  /// indépendamment des déplacements réels (contrairement au flux GPS
-  /// qui ne déclenche qu'après distanceFilter mètres parcourus).
   void _startPeriodicSend() {
     _sendTimer?.cancel();
     _sendTimer = Timer.periodic(const Duration(seconds: 5), (_) {
@@ -176,45 +89,103 @@ class WsPositionSender {
 
   Future<void> _startLocationStream() async {
     try {
-      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      _Log.info('Démarrage du flux de localisation...');
+
+      // --- Étapes strictement identiques au repository qui fonctionne ---
+      // On garde ça minimal et on récupère une position AVANT de faire
+      // quoi que ce soit d'autre (notification, foreground service...).
+      bool serviceEnabled = await _location.serviceEnabled();
       if (!serviceEnabled) {
-        _reportError("GPS non activé !");
+        serviceEnabled = await _location.requestService();
+        if (!serviceEnabled) {
+          _reportError('Le service de localisation est désactivé');
+          return;
+        }
+      }
+
+      PermissionStatus permissionStatus = await _location.hasPermission();
+      if (permissionStatus == PermissionStatus.denied) {
+        permissionStatus = await _location.requestPermission();
+      }
+      if (permissionStatus == PermissionStatus.denied ||
+          permissionStatus == PermissionStatus.deniedForever) {
+        _reportError('Les permissions de localisation sont refusées');
         return;
       }
 
-      LocationPermission permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied ||
-          permission == LocationPermission.deniedForever) {
-        _reportError("Permission de localisation non accordée");
-        return;
-      }
+      // Précision + pas de filtre de distance (envoi cadencé par le Timer).
+      await _location.changeSettings(
+        accuracy: LocationAccuracy.high,
+        distanceFilter: 0,
+      );
+
+      // Position initiale récupérée tout de suite, comme dans le repository.
+      _Log.info('Récupération de la position initiale...');
+      final LocationData initialData = await _location.getLocation();
+      _Log.success(
+        'Position initiale obtenue : ${initialData.latitude}, ${initialData.longitude}',
+      );
+      _lastPosition = initialData;
 
       await _positionSub?.cancel();
-      _positionSub = Geolocator.getPositionStream(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.high,
-          distanceFilter: 0, // on veut toutes les positions, l'envoi est cadencé par le Timer
-        ),
-      ).listen(
+      _positionSub = _location.onLocationChanged.listen(
             (pos) => _lastPosition = pos,
         onError: (e) => _reportError('Erreur flux GPS : $e'),
       );
 
-      _Log.info('Flux GPS démarré');
+      _Log.success('Flux GPS démarré');
+
+      // --- Configuration "arrière-plan" séparée, non bloquante ---
+      // On la lance après coup, dans son propre try/catch, pour qu'une
+      // erreur ici (notification, foreground service...) ne puisse plus
+      // empêcher l'obtention de la position.
+      unawaited(_setupBackgroundMode(permissionStatus));
     } catch (e) {
       _reportError('Erreur démarrage localisation : $e');
     }
   }
 
-  void _sendPosition(Position pos) {
+  Future<void> _setupBackgroundMode(PermissionStatus permissionStatus) async {
+    try {
+      if (permissionStatus == PermissionStatus.grantedLimited) {
+        _Log.warning(
+          'Permission "en cours d\'utilisation" uniquement : le suivi '
+              's\'arrêtera écran éteint / app en arrière-plan. L\'utilisateur '
+              'doit activer "Toujours autoriser" dans les réglages système.',
+        );
+      }
+
+      // Android 13+ (API 33) : nécessaire pour afficher la notification
+      // persistante du foreground service.
+      final notifStatus = await ph.Permission.notification.request();
+      _Log.info('Permission notification : $notifStatus');
+
+      await _location.changeNotificationOptions(
+        title: 'Suivi de position actif',
+        subtitle: 'Envoi de votre position en cours',
+        onTapBringToFront: true,
+      );
+
+      if (permissionStatus == PermissionStatus.granted) {
+        final bgEnabled = await _location.enableBackgroundMode(enable: true);
+        _Log.info('Mode arrière-plan activé : $bgEnabled');
+      }
+    } catch (e) {
+      // On log seulement : le flux de position principal continue même
+      // si le mode arrière-plan / la notification échoue.
+      _Log.warning('Configuration arrière-plan échouée (non bloquant) : $e');
+    }
+  }
+
+  void _sendPosition(LocationData pos) {
     if (!_connected || _client == null || _busId == null) return;
 
     final data = {
-      "busId": _busId,
-      "latitude": pos.latitude,
-      "longitude": pos.longitude,
-      "type": "UPDATE",
-      "heading": pos.heading
+      'driverId': _busId,
+      'latitude': pos.latitude,
+      'longitude': pos.longitude,
+      'type': 'UPDATE',
+      'heading': pos.heading,
     };
 
     try {
@@ -232,6 +203,7 @@ class WsPositionSender {
   Future<void> dispose() async {
     await _positionSub?.cancel();
     _sendTimer?.cancel();
+    await _location.enableBackgroundMode(enable: false);
     _client?.deactivate();
     _Log.info('WsPositionSender arrêté');
   }
