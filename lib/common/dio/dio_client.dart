@@ -35,19 +35,19 @@ class DioClient {
         Log.success('Réponse reçue : ${response.data}');
         return handler.next(response);
       },
-      onError: (DioException e, handler) {
-        Log.error('Erreur : ${e.message}');
-        Log.error('   → URL: ${e.requestOptions.method} ${e.requestOptions.uri}');
-        Log.error('   → Réponse serveur: ${e.response?.data}');
+        onError: (DioException e, handler) {
+          Log.error('Erreur : ${e.message}');
+          Log.error('   → URL: ${e.requestOptions.method} ${e.requestOptions.uri}');
+          Log.error('   → Réponse serveur: ${e.response?.data}');
 
-        if (e.response?.statusCode == 401) {
-          // Le token a peut-être expiré — on l'invalide pour forcer
-          // un nouveau login au prochain appel.
-          AuthService.instance.invalidate();
-        }
+          if (e.response?.statusCode == 401) {
+            // Session invalide/expirée → déconnexion complète, ce qui déclenche
+            // la redirection automatique vers /login via go_router.
+            AuthService.instance.logout();
+          }
 
-        return handler.next(e);
-      },
+          return handler.next(e);
+        },
     ));
   }
 

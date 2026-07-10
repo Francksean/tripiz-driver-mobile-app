@@ -7,7 +7,7 @@ class ItineraryRepository {
 
   Future<List<Itinerary>> getTodayItineraries() async {
     try {
-      final response = await _dio.get('/trip/admin/driver/today');
+      final response = await _dio.get('/trip/driver/today');
 
       final List<dynamic> data = response.data as List<dynamic>;
 
@@ -16,26 +16,41 @@ class ItineraryRepository {
           .toList();
     } on DioException catch (e) {
       if (e.response?.statusCode == 401) {
-        // Endpoint protégé par Bearer token (voir doc §5 : auth non
-        // encore intégrée côté app). L'appel échouera tant que ce n'est
-        // pas branché.
         throw Exception('Non authentifié : jeton manquant ou invalide.');
       }
       rethrow;
     }
   }
 
+  /// Change le statut d'un trajet côté backend.
+  /// [tripId] : l'id du trajet (Itinerary.id)
+  /// [status] : le nouveau statut, au format enum app (ItineraryStatus)
+  Future<void> updateTripStatus(String tripId, ItineraryStatus status) async {
+    try {
+      await _dio.patch(
+        '/trip/driver/$tripId/status',
+        data: {'tripStatus': _statusToBackend(status)},
+      );
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 401) {
+        throw Exception('Non authentifié : jeton manquant ou invalide.');
+      }
+      throw Exception(
+          'Échec de mise à jour du statut (${e.response?.statusCode}) : ${e.response?.data}');
+    }
+  }
+
   Itinerary _mapTripToItinerary(Map<String, dynamic> json) {
     final tripId = json['trip_id'] as String;
-    final itineraryId = json['itinerary_id'] as String?;
+    final itinerary = json['itinerary'] as Map<String, dynamic>?;
+
+    final itineraryName = itinerary?['itinerary_name'] as String?;
+    final points = _splitItineraryName(itineraryName);
 
     return Itinerary(
       id: tripId,
-      // itinerary_id seul ne donne pas les noms de stations
-      // (GET /itinerary/{id} pas encore branché, voir doc §5).
-      // On affiche l'itinerary_id tronqué en attendant.
-      startPoint: _shortId(itineraryId),
-      endPoint: '—',
+      startPoint: points.$1,
+      endPoint: points.$2,
       departureTime: _parseDepartureTime(
         json['schedule_departure'] as String?,
         json['trip_date'] as String?,
@@ -45,18 +60,24 @@ class ItineraryRepository {
     );
   }
 
-  String _shortId(String? id) {
-    if (id == null || id.isEmpty) return '—';
-    return id.length > 8 ? id.substring(0, 8) : id;
+  /// "Bonanjo - Yassa" → ("Bonanjo", "Yassa").
+  /// Si le format ne correspond pas (pas de " - "), on retombe sur le nom
+  /// complet pour startPoint et '—' pour endPoint.
+  (String, String) _splitItineraryName(String? name) {
+    if (name == null || name.isEmpty) return ('—', '—');
+    final parts = name.split(' - ');
+    if (parts.length == 2) {
+      return (parts[0].trim(), parts[1].trim());
+    }
+    return (name, '—');
   }
 
   DateTime _parseDepartureTime(String? scheduleDeparture, String? tripDate) {
-    // schedule_departure est typé "string" côté swagger, sans format
-    // garanti. On tente un parse ISO, sinon fallback sur trip_date,
-    // sinon "maintenant".
-    if (scheduleDeparture != null) {
-      final parsed = DateTime.tryParse(scheduleDeparture);
-      if (parsed != null) return parsed;
+    // schedule_departure semble être une heure seule ("14:08:00"), pas une
+    // date complète — on la combine avec trip_date si possible.
+    if (scheduleDeparture != null && tripDate != null) {
+      final combined = DateTime.tryParse('${tripDate}T$scheduleDeparture');
+      if (combined != null) return combined;
     }
     if (tripDate != null) {
       final parsed = DateTime.tryParse(tripDate);
@@ -66,11 +87,6 @@ class ItineraryRepository {
   }
 
   ItineraryStatus _mapStatus(String? tripStatus) {
-    // ⚠️ Seul "PROGRAMME" est confirmé par le swagger. Les valeurs pour
-    // enCours/termine sont des suppositions (EN_COURS / TERMINE) —
-    // à corriger dès que tu as la liste exacte de l'enum trip_status
-    // côté backend (endpoint PATCH /trip/admin/driver/{tripId}/status
-    // laisse deviner qu'il y en a au moins 2-3 autres).
     switch (tripStatus) {
       case 'PROGRAMME':
         return ItineraryStatus.aVenir;
@@ -80,6 +96,17 @@ class ItineraryRepository {
         return ItineraryStatus.termine;
       default:
         return ItineraryStatus.aVenir;
+    }
+  }
+
+  String _statusToBackend(ItineraryStatus status) {
+    switch (status) {
+      case ItineraryStatus.aVenir:
+        return 'PROGRAMME';
+      case ItineraryStatus.enCours:
+        return 'EN_COURS';
+      case ItineraryStatus.termine:
+        return 'TERMINE';
     }
   }
 }

@@ -1,4 +1,3 @@
-import 'package:dotted_line/dotted_line.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:shimmer/shimmer.dart';
@@ -35,21 +34,26 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     return BlocProvider.value(
       value: _homeCubit,
-      child: Padding(
-        padding: EdgeInsets.only(
-          left: 15.0,
-          right: 15.0,
-          top: kToolbarHeight + 40,
-        ),
-        child: RefreshIndicator(
-          onRefresh: () => _homeCubit.loadTodayItineraries(),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.start,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildHeader(),
-              _buildItineraryList(),
-            ],
+      child: Container(
+        color: AppColors.background,
+        child: Padding(
+          padding: EdgeInsets.only(
+            left: 15.0,
+            right: 15.0,
+            top: kToolbarHeight + 40,
+          ),
+          child: RefreshIndicator(
+            color: AppColors.primary,
+            onRefresh: () => _homeCubit.loadTodayItineraries(),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildHeader(),
+                const SizedBox(height: 16),
+                _buildItineraryList(),
+              ],
+            ),
           ),
         ),
       ),
@@ -66,17 +70,25 @@ class _HomeScreenState extends State<HomeScreen> {
             "Itinéraires du jour",
             style: TextStyle(
               fontSize: FontSizes.upperExtra,
-              color: AppColors.black,
+              color: AppColors.vantablack,
               fontWeight: FontWeight.bold,
+              letterSpacing: -0.5,
             ),
           ),
-          const SizedBox(height: 4),
-          Text(
-            CustomDateUtils.formatTodayDate(),
-            style: TextStyle(
-              fontSize: FontSizes.large,
-              color: AppColors.vantablack,
-            ),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              Icon(Icons.calendar_today_rounded, size: 14, color: AppColors.secondary),
+              const SizedBox(width: 6),
+              Text(
+                CustomDateUtils.formatTodayDate(),
+                style: TextStyle(
+                  fontSize: FontSizes.large,
+                  color: AppColors.black,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -90,42 +102,18 @@ class _HomeScreenState extends State<HomeScreen> {
           if (state is HomeLoading || state is HomeInitial) {
             return _buildShimmerList();
           } else if (state is HomeError) {
-            return Center(child: Text(state.message));
+            return _buildErrorState(state.message);
           } else if (state is HomeLoaded) {
             if (state.itineraries.isEmpty) {
-              return Center(
-                child: Text(
-                  "Aucun itinéraire prévu aujourd'hui",
-                  style: TextStyle(
-                    fontSize: FontSizes.large,
-                    color: Colors.grey,
-                  ),
-                ),
-              );
+              return _buildEmptyState();
             }
 
-            return ListView.builder(
-              padding: EdgeInsets.zero,
+            return ListView.separated(
+              padding: const EdgeInsets.only(bottom: 24),
               itemCount: state.itineraries.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 12),
               itemBuilder: (context, index) {
-                final itinerary = state.itineraries[index];
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    ItineraryCard(itinerary: itinerary),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 8.0),
-                      child: DottedLine(
-                        direction: Axis.horizontal,
-                        lineLength: double.infinity,
-                        lineThickness: 1.0,
-                        dashLength: 4.0,
-                        dashColor: AppColors.background,
-                        dashGapLength: 4.0,
-                      ),
-                    ),
-                  ],
-                );
+                return ItineraryCard(itinerary: state.itineraries[index]);
               },
             );
           }
@@ -135,21 +123,70 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 72,
+            height: 72,
+            decoration: BoxDecoration(
+              color: AppColors.primary.withOpacity(0.08),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(Icons.event_available_rounded, size: 34, color: AppColors.primary),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            "Aucun itinéraire prévu aujourd'hui",
+            style: TextStyle(
+              fontSize: FontSizes.large,
+              color: AppColors.black,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildErrorState(String message) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.error_outline_rounded, size: 34, color: AppColors.red),
+          const SizedBox(height: 12),
+          Text(
+            message,
+            style: TextStyle(fontSize: FontSizes.large, color: AppColors.black),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildShimmerList() {
     return Shimmer.fromColors(
       baseColor: AppColors.background,
-      highlightColor: Colors.grey[100]!,
-      child: ListView.builder(
+      highlightColor: AppColors.white,
+      child: ListView.separated(
         padding: EdgeInsets.zero,
         itemCount: 4,
+        separatorBuilder: (_, __) => const SizedBox(height: 12),
         itemBuilder: (context, index) {
-          return Padding(
-            padding: const EdgeInsets.symmetric(vertical: 15.0),
+          return Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppColors.white,
+              borderRadius: BorderRadius.circular(18),
+            ),
             child: Row(
               children: [
                 Container(
-                  width: 44,
-                  height: 44,
+                  width: 48,
+                  height: 48,
                   decoration: BoxDecoration(
                     color: AppColors.background,
                     shape: BoxShape.circle,
