@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'package:tripiz_driver_mobile_app/common/dio/dio_client.dart';
+import 'package:tripiz_driver_mobile_app/common/log/log.dart';
 
 class PaymentException implements Exception {
   final String message;
@@ -10,9 +11,6 @@ class PaymentException implements Exception {
   String toString() => message;
 }
 
-/// Données extraites du QR code généré côté passager.
-/// Les champs correspondent exactement au corps attendu par
-/// POST /payments/process-qr-payment.
 class QrPaymentData {
   final String ticketId;
   final String tripId;
@@ -49,22 +47,28 @@ class QrPaymentData {
     'timestamp': timestamp,
     'signature': signature,
   };
+
+  @override
+  String toString() =>
+      'QrPaymentData(ticketId: $ticketId, tripId: $tripId, walletId: $walletId, '
+          'amount: $amount, timestamp: $timestamp, signature: ${signature.substring(0, signature.length > 8 ? 8 : signature.length)}...)';
 }
 
 class PaymentRepository {
   final Dio _dio = DioClient.instance.dio;
 
-  /// Parse le contenu brut scanné (chaîne JSON encodée dans le QR) en
-  /// [QrPaymentData]. Lève une [PaymentException] si le QR n'a pas le
-  /// bon format (code cassé, QR d'un autre type, etc.).
   QrPaymentData parseQrContent(String rawContent) {
+    Log.info('Contenu brut scanné : $rawContent');
     try {
       final decoded = jsonDecode(rawContent);
       if (decoded is! Map<String, dynamic>) {
         throw const FormatException('QR non structuré');
       }
-      return QrPaymentData.fromJson(decoded);
-    } catch (_) {
+      final data = QrPaymentData.fromJson(decoded);
+      Log.success('QR décodé : $data');
+      return data;
+    } catch (e) {
+      Log.error('Échec du décodage du QR : $e');
       throw PaymentException(
         "Ce QR code n'est pas un ticket de paiement valide.",
       );
@@ -72,10 +76,14 @@ class PaymentRepository {
   }
 
   Future<void> processQrPayment(QrPaymentData data) async {
+    Log.info('Envoi du paiement pour ticket ${data.ticketId} (${data.amount} FCFA)...');
     try {
       await _dio.post('/payments/process-qr-payment', data: data.toJson());
+      Log.success('Paiement accepté pour ticket ${data.ticketId} — ${data.amount} FCFA débités du wallet ${data.walletId}');
     } on DioException catch (e) {
-      throw PaymentException(_mapError(e));
+      final message = _mapError(e);
+      Log.error('Paiement refusé pour ticket ${data.ticketId} : $message (status: ${e.response?.statusCode})');
+      throw PaymentException(message);
     }
   }
 
@@ -96,8 +104,6 @@ class PaymentRepository {
     }
   }
 
-  /// Traduit les messages 400 documentés par le backend en messages
-  /// utilisateur clairs, plutôt que d'afficher le texte technique brut.
   String _mapBadRequest(String? serverMessage) {
     if (serverMessage == null) return 'Paiement refusé.';
     final lower = serverMessage.toLowerCase();

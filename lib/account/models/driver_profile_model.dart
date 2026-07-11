@@ -1,35 +1,53 @@
 class DriverProfile {
-  final String name;
+  final String userId;
+  final String firstName;
+  final String lastName;
   final String email;
   final String phone;
+  final String status;
+  final String role;
   final String? avatarPath;
 
   DriverProfile({
-    required this.name,
+    required this.userId,
+    required this.firstName,
+    required this.lastName,
     required this.email,
     required this.phone,
+    required this.status,
+    required this.role,
     this.avatarPath,
   });
 
+  String get fullName => '$firstName $lastName'.trim();
+
   factory DriverProfile.fromJson(Map<String, dynamic> json) {
     return DriverProfile(
-      name: json['name'] as String,
+      userId: json['userId'] as String,
+      firstName: json['firstName'] as String? ?? '',
+      lastName: json['lastName'] as String? ?? '',
       email: json['email'] as String,
-      phone: json['phone'] as String,
-      avatarPath: json['avatarPath'] as String?,
+      phone: json['phone'] as String? ?? '',
+      status: json['status'] as String? ?? '',
+      role: json['role'] as String? ?? '',
     );
   }
 
   DriverProfile copyWith({
-    String? name,
+    String? firstName,
+    String? lastName,
     String? email,
     String? phone,
     String? avatarPath,
   }) {
     return DriverProfile(
-      name: name ?? this.name,
+      userId: userId,
+      firstName: firstName ?? this.firstName,
+      lastName: lastName ?? this.lastName,
       email: email ?? this.email,
       phone: phone ?? this.phone,
+      status: status,
+      role: role,
       avatarPath: avatarPath ?? this.avatarPath,
     );
   }

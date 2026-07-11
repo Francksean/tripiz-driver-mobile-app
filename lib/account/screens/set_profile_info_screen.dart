@@ -63,12 +63,12 @@ class SetProfileInfosScreen extends StatelessWidget {
                           type: TextInputType.name,
                           icon: Icons.person_outline,
                           label: "Nom",
-                          value: profile.name,
+                          value: profile.fullName,
                           explanation:
                           "Le nom qui apparaîtra sur votre profil chauffeur",
                           onSave: (newValue) => context
                               .read<AccountCubit>()
-                              .updateField(name: newValue),
+                              .updateField(firstName: newValue),
                         ),
                         InfosTile(
                           type: TextInputType.emailAddress,

@@ -1,98 +1,286 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
-import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:tripiz_driver_mobile_app/QRCode/components/qrcode_scanner.dart';
+import 'package:tripiz_driver_mobile_app/QRCode/cubits/payment_cubit.dart';
+import 'package:tripiz_driver_mobile_app/QRCode/repositories/payment_repository.dart';
+import 'package:tripiz_driver_mobile_app/common/constants/app_colors.dart';
+import 'package:tripiz_driver_mobile_app/common/constants/font_sizes.dart';
 
-class QrcodeScreen extends StatefulWidget {
+class QrcodeScreen extends StatelessWidget {
   const QrcodeScreen({super.key});
 
   @override
-  State<QrcodeScreen> createState() => _QrcodeScreenState();
+  Widget build(BuildContext context) {
+    return BlocProvider(
+      create: (_) => PaymentCubit(),
+      child: const _QrcodeView(),
+    );
+  }
 }
 
-class _QrcodeScreenState extends State<QrcodeScreen> {
-  String? scannedCode;
-  MobileScannerController? _scannerController;
+class _QrcodeView extends StatefulWidget {
+  const _QrcodeView();
 
   @override
-  void initState() {
-    super.initState();
-    _scannerController = MobileScannerController();
+  State<_QrcodeView> createState() => _QrcodeViewState();
+}
+
+class _QrcodeViewState extends State<_QrcodeView> {
+  // Incrémenté pour recréer QrScannerWidget avec un état propre
+  // (nouveau contrôleur, _isScanning = true) après chaque paiement.
+  int _scannerResetKey = 0;
+
+  void _handleScan(String code) {
+    context.read<PaymentCubit>().payFromQrContent(code);
   }
 
-  @override
-  void dispose() {
-    _scannerController?.dispose();
-    super.dispose();
-  }
-
-  void _handleScan(String code) async {
-    setState(() {
-      scannedCode = code;
-    });
-
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text('Code scanné : $code')));
-
-    final data = {
-      "tripId": code,
-      "walletId": "94f94902-c724-47ca-85d7-529af32b4a64",
-      "amount": 200,
-    };
-
-    const String endpointUrl =
-        'https://tripiz-api-production-d0f2.up.railway.app/transactions/spending';
-
-    try {
-      final response = await http.post(
-        Uri.parse(endpointUrl),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode(data),
-      );
-
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Transaction envoyée avec succès ✅')),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Erreur : ${response.statusCode} - ${response.body}'),
-          ),
-        );
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Erreur réseau : $e')));
-    } finally {
-      // Restart scanner after processing
-      _scannerController?.start();
-    }
+  void _scanNext() {
+    context.read<PaymentCubit>().reset();
+    setState(() => _scannerResetKey++);
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Scanner de QR Code")),
-      body: Column(
-        children: [
-          Expanded(flex: 5, child: QrScannerWidget(onScanned: _handleScan)),
-          Expanded(
-            flex: 1,
-            child: Center(
-              child: Text(
-                scannedCode != null
-                    ? 'Résultat : $scannedCode'
-                    : 'Aucun code scanné',
-                style: const TextStyle(fontSize: 18),
+      backgroundColor: AppColors.vantablack,
+      body: BlocBuilder<PaymentCubit, PaymentState>(
+        builder: (context, state) {
+          return Stack(
+            fit: StackFit.expand,
+            children: [
+              // Scanner en plein écran, toujours actif en fond.
+              QrScannerWidget(
+                key: ValueKey(_scannerResetKey),
+                onScanned: _handleScan,
               ),
+
+              // Bandeau d'instruction discret en haut, visible seulement
+              // tant qu'aucun résultat n'est encore là.
+              if (state is PaymentInitial) _buildTopHint(),
+
+              // Voile + spinner pendant le traitement.
+              if (state is PaymentLoading) _buildProcessingOverlay(),
+
+              // Carte résultat qui glisse depuis le bas, seulement en
+              // cas de succès ou d'échec — ne prend pas de place sinon.
+              AnimatedPositioned(
+                duration: const Duration(milliseconds: 320),
+                curve: Curves.easeOutCubic,
+                left: 0,
+                right: 0,
+                bottom: (state is PaymentSuccess || state is PaymentFailure) ? 0 : -320,
+                child: _buildResultCard(state),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildTopHint() {
+    return Positioned(
+      top: 60,
+      left: 24,
+      right: 24,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: AppColors.vantablack.withOpacity(0.55),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.qr_code_scanner_rounded, color: AppColors.white, size: 20),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                "Placez le QR code du passager dans le cadre",
+                style: TextStyle(color: AppColors.white, fontSize: FontSizes.medium),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildProcessingOverlay() {
+    return Container(
+      color: AppColors.vantablack.withOpacity(0.55),
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const CircularProgressIndicator(color: AppColors.white),
+            const SizedBox(height: 16),
+            Text(
+              "Traitement du paiement...",
+              style: TextStyle(color: AppColors.white, fontSize: FontSizes.large),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildResultCard(PaymentState state) {
+    if (state is PaymentSuccess) return _buildSuccessCard(state.data);
+    if (state is PaymentFailure) return _buildFailureCard(state.message);
+    return const SizedBox.shrink();
+  }
+
+  Widget _buildSuccessCard(QrPaymentData data) {
+    const successColor = Color.fromRGBO(46, 163, 105, 1);
+
+    return _ResultCardShell(
+      accentColor: successColor,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Container(
+            width: 60,
+            height: 60,
+            decoration: BoxDecoration(
+              color: successColor.withOpacity(0.12),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.check_circle_rounded, color: successColor, size: 32),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            "Paiement accepté",
+            style: TextStyle(
+              fontSize: FontSizes.lowerBig,
+              fontWeight: FontWeight.bold,
+              color: AppColors.vantablack,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            "${data.amount.toStringAsFixed(0)} FCFA",
+            style: TextStyle(
+              fontSize: FontSizes.extra,
+              fontWeight: FontWeight.bold,
+              color: AppColors.primary,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            "Ticket ${data.ticketId.substring(0, 8)}...",
+            style: TextStyle(fontSize: FontSizes.small, color: AppColors.black.withOpacity(0.6)),
+          ),
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            height: 48,
+            child: ElevatedButton(
+              onPressed: _scanNext,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: AppColors.white,
+                elevation: 0,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              child: const Text("Scanner un autre ticket"),
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildFailureCard(String message) {
+    return _ResultCardShell(
+      accentColor: AppColors.red,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Container(
+            width: 60,
+            height: 60,
+            decoration: BoxDecoration(
+              color: AppColors.red.withOpacity(0.1),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(Icons.error_outline_rounded, color: AppColors.red, size: 32),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            "Paiement refusé",
+            style: TextStyle(
+              fontSize: FontSizes.lowerBig,
+              fontWeight: FontWeight.bold,
+              color: AppColors.vantablack,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            message,
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: FontSizes.medium, color: AppColors.black),
+          ),
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            height: 48,
+            child: OutlinedButton(
+              onPressed: _scanNext,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.primary,
+                side: BorderSide(color: AppColors.primary),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              child: const Text("Réessayer"),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Coquille commune (carte blanche arrondie avec liseré coloré en haut)
+/// pour les cartes de résultat succès/échec.
+class _ResultCardShell extends StatelessWidget {
+  final Color accentColor;
+  final Widget child;
+
+  const _ResultCardShell({required this.accentColor, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(24, 20, 24, 28),
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.vantablack.withOpacity(0.25),
+            blurRadius: 30,
+            offset: const Offset(0, -8),
+          ),
+        ],
+      ),
+      child: SafeArea(
+        top: false,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 40,
+              height: 4,
+              margin: const EdgeInsets.only(bottom: 16),
+              decoration: BoxDecoration(
+                color: accentColor.withOpacity(0.3),
+                borderRadius: BorderRadius.circular(4),
+              ),
+            ),
+            child,
+          ],
+        ),
       ),
     );
   }

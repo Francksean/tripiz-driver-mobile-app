@@ -51,7 +51,7 @@ class WsPositionSender {
             _connected = false;
             _Log.warning('Déconnecté du serveur STOMP');
           },
-          reconnectDelay: const Duration(seconds: 5),
+          reconnectDelay: const Duration(seconds: 1),
           stompConnectHeaders: {'Authorization': 'Bearer $token'},
           webSocketConnectHeaders: {'Authorization': 'Bearer $token'},
         ),
