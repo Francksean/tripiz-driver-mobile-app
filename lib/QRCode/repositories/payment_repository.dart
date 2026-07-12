@@ -58,17 +58,88 @@ class PaymentRepository {
   final Dio _dio = DioClient.instance.dio;
 
   QrPaymentData parseQrContent(String rawContent) {
+    Log.info('══════ SCAN QR ══════');
+    Log.info('Longueur du contenu brut : ${rawContent.length} caractères');
     Log.info('Contenu brut scanné : $rawContent');
+
+    // Le backend encode le QR sous forme compacte pipe-separated :
+    // ticketId|tripId|walletId|amount|timestamp|signature
+    // (pas en JSON, malgré l'exemple JSON documenté pour la réponse de
+    // POST /payments/generate-qr-data — ce format compact est ce qui est
+    // réellement encodé dans l'image du QR pour réduire sa densité).
+    if (rawContent.contains('|')) {
+      return _parsePipeSeparated(rawContent);
+    }
+
+    // Repli sur JSON au cas où le format change côté backend.
+    return _parseJson(rawContent);
+  }
+
+  QrPaymentData _parsePipeSeparated(String rawContent) {
+    final parts = rawContent.split('|');
+    Log.info('Format détecté : pipe-separated (${parts.length} segments)');
+
+    if (parts.length != 6) {
+      Log.error('Nombre de segments inattendu : ${parts.length} (6 attendus)');
+      throw PaymentException(
+        "Ce QR code n'est pas un ticket de paiement valide.",
+      );
+    }
+
     try {
-      final decoded = jsonDecode(rawContent);
-      if (decoded is! Map<String, dynamic>) {
-        throw const FormatException('QR non structuré');
-      }
-      final data = QrPaymentData.fromJson(decoded);
-      Log.success('QR décodé : $data');
+      final data = QrPaymentData(
+        ticketId: parts[0],
+        tripId: parts[1],
+        walletId: parts[2],
+        amount: double.parse(parts[3]),
+        timestamp: int.parse(parts[4]),
+        signature: parts[5],
+      );
+      Log.success('QR décodé avec succès :');
+      Log.success('  ticketId  : ${data.ticketId}');
+      Log.success('  tripId    : ${data.tripId}');
+      Log.success('  walletId  : ${data.walletId}');
+      Log.success('  amount    : ${data.amount} FCFA');
+      Log.success('  timestamp : ${data.timestamp}');
+      Log.success('  signature : ${data.signature}');
       return data;
     } catch (e) {
-      Log.error('Échec du décodage du QR : $e');
+      Log.error('Échec du parsing pipe-separated : $e');
+      throw PaymentException(
+        "Ce QR code n'est pas un ticket de paiement valide.",
+      );
+    }
+  }
+
+  QrPaymentData _parseJson(String rawContent) {
+    dynamic decoded;
+    try {
+      decoded = jsonDecode(rawContent);
+    } catch (e) {
+      Log.error('Le contenu scanné n\'est ni pipe-separated, ni du JSON valide : $e');
+      throw PaymentException(
+        "Ce QR code n'est pas un ticket de paiement valide.",
+      );
+    }
+
+    if (decoded is! Map<String, dynamic>) {
+      Log.error('Le JSON décodé n\'est pas un objet (type reçu : ${decoded.runtimeType})');
+      throw PaymentException(
+        "Ce QR code n'est pas un ticket de paiement valide.",
+      );
+    }
+
+    Log.info('Clés présentes dans le JSON : ${decoded.keys.toList()}');
+    decoded.forEach((key, value) {
+      Log.info('  • $key = $value (${value.runtimeType})');
+    });
+
+    try {
+      final data = QrPaymentData.fromJson(decoded);
+      Log.success('QR décodé avec succès : $data');
+      return data;
+    } catch (e) {
+      Log.error('Échec du mapping vers QrPaymentData : $e');
       throw PaymentException(
         "Ce QR code n'est pas un ticket de paiement valide.",
       );
