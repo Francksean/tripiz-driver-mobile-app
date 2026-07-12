@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:tripiz_driver_mobile_app/QRCode/components/qrcode_scanner.dart';
 import 'package:tripiz_driver_mobile_app/QRCode/cubits/payment_cubit.dart';
+import 'package:tripiz_driver_mobile_app/QRCode/cubits/trip_gate_cubit.dart';
 import 'package:tripiz_driver_mobile_app/QRCode/repositories/payment_repository.dart';
 import 'package:tripiz_driver_mobile_app/common/constants/app_colors.dart';
 import 'package:tripiz_driver_mobile_app/common/constants/font_sizes.dart';
@@ -12,8 +13,117 @@ class QrcodeScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return BlocProvider(
-      create: (_) => PaymentCubit(),
-      child: const _QrcodeView(),
+      create: (_) => TripGateCubit()..checkActiveTrip(),
+      child: BlocBuilder<TripGateCubit, TripGateState>(
+        builder: (context, gateState) {
+          if (gateState is TripGateLoading) {
+            return _buildGateLoading();
+          }
+          if (gateState is TripGateBlocked) {
+            return _buildGateBlocked(context);
+          }
+          if (gateState is TripGateError) {
+            return _buildGateError(context, gateState.message);
+          }
+          // TripGateAllowed
+          return BlocProvider(
+            create: (_) => PaymentCubit(),
+            child: const _QrcodeView(),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildGateLoading() {
+    return Scaffold(
+      backgroundColor: AppColors.white,
+      body: const Center(child: CircularProgressIndicator()),
+    );
+  }
+
+  Widget _buildGateBlocked(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppColors.white,
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 84,
+                height: 84,
+                decoration: BoxDecoration(
+                  color: AppColors.background,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.qr_code_scanner_rounded,
+                  size: 38,
+                  color: AppColors.black.withOpacity(0.4),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                "Aucun trajet en cours",
+                style: TextStyle(
+                  fontSize: FontSizes.lowerBig,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.vantablack,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                "Démarrez un trajet depuis l'onglet Accueil pour pouvoir scanner les tickets des passagers.",
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: FontSizes.medium, color: AppColors.black),
+              ),
+              const SizedBox(height: 24),
+              TextButton.icon(
+                onPressed: () => context.read<TripGateCubit>().checkActiveTrip(),
+                icon: Icon(Icons.refresh_rounded, color: AppColors.primary, size: 18),
+                label: Text(
+                  "Actualiser",
+                  style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.w600),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGateError(BuildContext context, String message) {
+    return Scaffold(
+      backgroundColor: AppColors.white,
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.error_outline_rounded, size: 40, color: AppColors.red),
+              const SizedBox(height: 16),
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: FontSizes.large, color: AppColors.black),
+              ),
+              const SizedBox(height: 20),
+              TextButton.icon(
+                onPressed: () => context.read<TripGateCubit>().checkActiveTrip(),
+                icon: Icon(Icons.refresh_rounded, color: AppColors.primary, size: 18),
+                label: Text(
+                  "Réessayer",
+                  style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.w600),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -26,8 +136,6 @@ class _QrcodeView extends StatefulWidget {
 }
 
 class _QrcodeViewState extends State<_QrcodeView> {
-  // Incrémenté pour recréer QrScannerWidget avec un état propre
-  // (nouveau contrôleur, _isScanning = true) après chaque paiement.
   int _scannerResetKey = 0;
 
   void _handleScan(String code) {
@@ -48,21 +156,12 @@ class _QrcodeViewState extends State<_QrcodeView> {
           return Stack(
             fit: StackFit.expand,
             children: [
-              // Scanner en plein écran, toujours actif en fond.
               QrScannerWidget(
                 key: ValueKey(_scannerResetKey),
                 onScanned: _handleScan,
               ),
-
-              // Bandeau d'instruction discret en haut, visible seulement
-              // tant qu'aucun résultat n'est encore là.
               if (state is PaymentInitial) _buildTopHint(),
-
-              // Voile + spinner pendant le traitement.
               if (state is PaymentLoading) _buildProcessingOverlay(),
-
-              // Carte résultat qui glisse depuis le bas, seulement en
-              // cas de succès ou d'échec — ne prend pas de place sinon.
               AnimatedPositioned(
                 duration: const Duration(milliseconds: 320),
                 curve: Curves.easeOutCubic,
@@ -241,8 +340,6 @@ class _QrcodeViewState extends State<_QrcodeView> {
   }
 }
 
-/// Coquille commune (carte blanche arrondie avec liseré coloré en haut)
-/// pour les cartes de résultat succès/échec.
 class _ResultCardShell extends StatelessWidget {
   final Color accentColor;
   final Widget child;

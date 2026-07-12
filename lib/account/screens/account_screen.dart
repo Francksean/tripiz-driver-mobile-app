@@ -95,15 +95,17 @@ class _AccountScreenState extends State<AccountScreen> {
                     "Changer de numéro, de mot de passe, d'e-mail, d'avatar",
                     onTap: () => context.push('/app/account/edit'),
                   ),
-                  const ProfileItemTile(
+                  ProfileItemTile(
                     label: "Notifications",
                     icon: Icons.notifications_outlined,
                     subLabel: "Activer ou non les notifications",
+                    onTap: () => context.push('/app/account/notifications'),
                   ),
-                  const ProfileItemTile(
+                  ProfileItemTile(
                     label: "Reporting",
                     icon: Icons.flag_outlined,
                     subLabel: "Faites-nous part de vos difficultés",
+                    onTap: () => context.push('/app/account/reporting'),
                   ),
                   const SizedBox(height: 10),
                   _buildLogoutButton(context),

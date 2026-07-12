@@ -6,6 +6,9 @@ import 'package:tripiz_driver_mobile_app/common/constants/app_colors.dart';
 import 'package:tripiz_driver_mobile_app/common/dio/auth_service.dart';
 import 'package:tripiz_driver_mobile_app/location/location_permission_screen.dart';
 import 'package:tripiz_driver_mobile_app/location/ws_position_sender.dart';
+import 'package:tripiz_driver_mobile_app/account/screens/edit_profile_screen.dart';
+import 'package:tripiz_driver_mobile_app/account/screens/notifications_screen.dart';
+import 'package:tripiz_driver_mobile_app/account/screens/reporting_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -66,6 +69,18 @@ class _MyAppState extends State<MyApp> {
           path: '/app',
           builder: (context, state) => const CommonScaffold(),
         ),
+        GoRoute(
+          path: '/app/account/edit',
+          builder: (context, state) => const EditProfileScreen(),
+        ),
+        GoRoute(
+          path: '/app/account/notifications',
+          builder: (context, state) => const NotificationsScreen(),
+        ),
+        GoRoute(
+          path: '/app/account/reporting',
+          builder: (context, state) => const ReportingScreen(),
+        )
       ],
     );
   }
