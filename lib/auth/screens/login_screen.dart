@@ -48,6 +48,7 @@ class _LoginViewState extends State<_LoginView> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.white,
+      resizeToAvoidBottomInset: true,
       body: BlocListener<AuthCubit, AuthState>(
         listener: (context, state) {
           if (state is AuthFailure) {
@@ -60,118 +61,101 @@ class _LoginViewState extends State<_LoginView> {
               ),
             );
           }
-          // AuthSuccess : rien à faire ici. AuthService.notifyListeners()
-          // déclenche automatiquement la redirection go_router vers /app.
         },
         child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Container(
-                    width: 64,
-                    height: 64,
-                    decoration: BoxDecoration(
-                      color: AppColors.primary.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(18),
-                    ),
-                    child: Icon(Icons.directions_bus_filled_rounded,
-                        color: AppColors.primary, size: 32),
-                  ),
-                  const SizedBox(height: 24),
-                  Text(
-                    "Connexion chauffeur",
-                    style: TextStyle(
-                      fontSize: FontSizes.upperExtra,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.vantablack,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    "Connectez-vous pour accéder à vos trajets",
-                    style: TextStyle(fontSize: FontSizes.large, color: AppColors.black),
-                  ),
-                  const SizedBox(height: 32),
-                  _buildLabel("Identifiant"),
-                  const SizedBox(height: 8),
-                  TextFormField(
-                    controller: _usernameController,
-                    keyboardType: TextInputType.emailAddress,
-                    textInputAction: TextInputAction.next,
-                    decoration: _inputDecoration(
-                      hint: "Votre email ou identifiant",
-                      icon: Icons.person_outline_rounded,
-                    ),
-                    validator: (value) {
-                      if (value == null || value.trim().isEmpty) {
-                        return "L'identifiant est requis";
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 20),
-                  _buildLabel("Mot de passe"),
-                  const SizedBox(height: 8),
-                  TextFormField(
-                    controller: _passwordController,
-                    obscureText: _obscurePassword,
-                    textInputAction: TextInputAction.done,
-                    onFieldSubmitted: (_) => _submit(),
-                    decoration: _inputDecoration(
-                      hint: "Votre mot de passe",
-                      icon: Icons.lock_outline_rounded,
-                      suffixIcon: IconButton(
-                        icon: Icon(
-                          _obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
-                          color: AppColors.black,
-                          size: 20,
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _buildWelcomeHeader(),
+                const SizedBox(height: 36),
+                Form(
+                  key: _formKey,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        "Se connecter à un compte",
+                        style: TextStyle(
+                          fontSize: FontSizes.upperBig,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.vantablack,
                         ),
-                        onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
                       ),
-                    ),
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return "Le mot de passe est requis";
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 32),
-                  BlocBuilder<AuthCubit, AuthState>(
-                    builder: (context, state) {
-                      final isLoading = state is AuthLoading;
-                      return SizedBox(
-                        width: double.infinity,
-                        height: 52,
-                        child: ElevatedButton(
-                          onPressed: isLoading ? null : _submit,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.primary,
-                            foregroundColor: AppColors.white,
-                            elevation: 0,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                          ),
-                          child: isLoading
-                              ? const SizedBox(
-                            width: 22,
-                            height: 22,
-                            child: CircularProgressIndicator(strokeWidth: 2.4, color: AppColors.white),
-                          )
-                              : Text(
-                            "Se connecter",
-                            style: TextStyle(fontSize: FontSizes.lowerBig, fontWeight: FontWeight.w600),
+                      const SizedBox(height: 28),
+                      _buildLabel("E-mail"),
+                      const SizedBox(height: 8),
+                      TextFormField(
+                        controller: _usernameController,
+                        keyboardType: TextInputType.emailAddress,
+                        textInputAction: TextInputAction.next,
+                        decoration: _inputDecoration(hint: "email@gmail.com"),
+                        validator: (value) {
+                          if (value == null || value.trim().isEmpty) {
+                            return "L'identifiant est requis";
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 20),
+                      _buildLabel("Mot de passe"),
+                      const SizedBox(height: 8),
+                      TextFormField(
+                        controller: _passwordController,
+                        obscureText: _obscurePassword,
+                        textInputAction: TextInputAction.done,
+                        onFieldSubmitted: (_) => _submit(),
+                        decoration: _inputDecoration(
+                          hint: "••••••••••••••••",
+                          suffixIcon: IconButton(
+                            icon: Icon(
+                              _obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+                              color: AppColors.black,
+                              size: 20,
+                            ),
+                            onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
                           ),
                         ),
-                      );
-                    },
+                        validator: (value) {
+                          if (value == null || value.isEmpty) {
+                            return "Le mot de passe est requis";
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 32),
+                      BlocBuilder<AuthCubit, AuthState>(
+                        builder: (context, state) {
+                          final isLoading = state is AuthLoading;
+                          return SizedBox(
+                            height: 54,
+                            child: ElevatedButton(
+                              onPressed: isLoading ? null : _submit,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.primary,
+                                foregroundColor: AppColors.white,
+                                elevation: 0,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                              ),
+                              child: isLoading
+                                  ? const SizedBox(
+                                width: 22,
+                                height: 22,
+                                child: CircularProgressIndicator(strokeWidth: 2.4, color: AppColors.white),
+                              )
+                                  : Text(
+                                "Connexion",
+                                style: TextStyle(fontSize: FontSizes.lowerBig, fontWeight: FontWeight.w700),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ],
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
         ),
@@ -179,30 +163,68 @@ class _LoginViewState extends State<_LoginView> {
     );
   }
 
-  Widget _buildLabel(String text) {
-    return Text(
-      text,
-      style: TextStyle(fontSize: FontSizes.medium, fontWeight: FontWeight.w600, color: AppColors.black),
+  /// Bandeau de bienvenue avec le nom "Tripiz" en logo texte, calqué sur
+  /// la maquette. Si un asset image (assets/icon/logo.png) existe déjà,
+  /// tu peux remplacer ce texte par Image.asset(...) pour utiliser le
+  /// vrai logo graphique à la place.
+  Widget _buildWelcomeHeader() {
+    return Column(
+      children: [
+        Text(
+          "Bienvenue sur",
+          style: TextStyle(
+            fontSize: FontSizes.upperBig,
+            fontWeight: FontWeight.bold,
+            color: AppColors.vantablack,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              "Tripiz",
+              style: TextStyle(
+                fontSize: FontSizes.upperExtra + 8,
+                fontWeight: FontWeight.w900,
+                color: AppColors.primary,
+              ),
+            ),
+            const SizedBox(width: 6),
+            const Text("👋", style: TextStyle(fontSize: 28)),
+          ],
+        ),
+      ],
     );
   }
 
-  InputDecoration _inputDecoration({required String hint, required IconData icon, Widget? suffixIcon}) {
+  Widget _buildLabel(String text) {
+    return Text(
+      text,
+      style: TextStyle(fontSize: FontSizes.medium, fontWeight: FontWeight.w500, color: AppColors.black),
+    );
+  }
+
+  InputDecoration _inputDecoration({required String hint, Widget? suffixIcon}) {
     return InputDecoration(
       hintText: hint,
-      hintStyle: TextStyle(color: AppColors.black.withOpacity(0.5)),
-      prefixIcon: Icon(icon, color: AppColors.black, size: 20),
+      hintStyle: TextStyle(color: AppColors.black.withOpacity(0.4)),
       suffixIcon: suffixIcon,
-      filled: true,
-      fillColor: AppColors.background,
-      contentPadding: const EdgeInsets.symmetric(vertical: 14),
-      border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
-      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
+      contentPadding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: AppColors.border),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: AppColors.border),
+      ),
       focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(12),
         borderSide: BorderSide(color: AppColors.primary, width: 1.5),
       ),
       errorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(12),
         borderSide: BorderSide(color: AppColors.red, width: 1),
       ),
     );
